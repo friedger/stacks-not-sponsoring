@@ -111,6 +111,6 @@ describe('Sponsoring worker - Status', () => {
 		const response = await worker.fetch(request, env, ctx);
 		// Wait for all `Promise`s passed to `ctx.waitUntil()` to settle before running test assertions
 		await waitOnExecutionContext(ctx);
-		expect(await response.text()).toMatchInlineSnapshot(`"{"fees":{"not":10000,"sponsor":"SP1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRCBGD7R"}}"`);
+		expect(await response.text()).toMatchInlineSnapshot(`"{"fees":{"not":100000,"sponsor":"SP1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRCBGD7R"}}"`);
 	});
 });

@@ -11,17 +11,17 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
+import { bytesToHex } from '@stacks/common';
+import { getFetchOptions } from '@stacks/network';
 import {
 	TransactionVersion,
 	broadcastTransaction,
 	estimateTransactionFeeWithFallback,
 	getAddressFromPrivateKey,
 } from '@stacks/transactions';
+import { MINIMUM_NOT_FEES } from './lib/const';
 import { readRequestBody, responseError } from './lib/helpers';
 import { Details, extractDetails, isSponsorable, sponsorTx } from './lib/stacks';
-import { getFetchOptions } from '@stacks/network';
-import { MINIMUM_NOT_FEES } from './lib/const';
-
 const opts = getFetchOptions();
 delete opts.referrerPolicy;
 
@@ -48,6 +48,12 @@ export default {
 			if (url.pathname === '/status') {
 				return this.getStatus(env);
 			}
+			return Response.json(
+				{
+					error: 'unsupported url. try /status',
+				},
+				{ status: 404 }
+			);
 		} else {
 			return Response.json(
 				{
@@ -88,6 +94,7 @@ export default {
 			{
 				feeEstimate,
 				result,
+				txRaw: bytesToHex(sponsoredTx.serialize()),
 			},
 			{ headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST' } }
 		);
