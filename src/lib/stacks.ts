@@ -66,6 +66,7 @@ export const extractDetails = async (requestBody: any): Promise<Partial<Details>
 export const isValidSendManyNot = (tx: StacksTransaction, feesInNot: number, notSponsor: string) => {
 	// expect contract call
 	if (tx.payload.payloadType !== PayloadType.ContractCall) {
+		console.log('not contract call');
 		return false;
 	}
 	const payload = tx.payload as ContractCallPayload;
@@ -75,20 +76,24 @@ export const isValidSendManyNot = (tx: StacksTransaction, feesInNot: number, not
 		payload.contractName.content !== SEND_MANY_NOT_CONTRACT.contractName ||
 		payload.functionName.content !== SEND_MANY_NOT_CONTRACT.functionName
 	) {
+		console.log('not correct contract');
 		return false;
 	}
 	// expect receiver entry for sponsor
 	const receivers = payload.functionArgs[0] as ListCV<TupleCV<{ amount: UIntCV; to: PrincipalCV }>>;
 	const sponsorEntry = receivers.list.find((r) => addressToString(r.data['to'].address) === notSponsor);
 	if (!sponsorEntry) {
+		console.log(`not paying fees to ${notSponsor}`);
 		return false;
 	}
 	// expect at least minimum fee amount
 	const amountForSponsor = Number(sponsorEntry.data.amount.value);
 	if (amountForSponsor < MINIMUM_NOT_FEES) {
+		console.log('not paying enough fees');
 		return false;
 	}
 	if (amountForSponsor !== feesInNot) {
+		console.log('not paying fees as specified');
 		return false;
 	}
 	return true;

@@ -20,6 +20,6 @@ export function responseError(error: string) {
 		{
 			error,
 		},
-		{ status: 400 }
+		{ status: 400, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST' } }
 	);
 }
