@@ -2,10 +2,14 @@
 import { bytesToHex } from '@stacks/common';
 import { StacksMainnet } from '@stacks/network';
 import {
+	AddressHashMode,
 	AnchorMode,
 	PostConditionMode,
+	StacksTransaction,
 	TransactionVersion,
 	TupleCV,
+	createSingleSigSpendingCondition,
+	createSponsoredAuth,
 	getAddressFromPrivateKey,
 	listCV,
 	makeContractCall,
@@ -13,10 +17,12 @@ import {
 	tupleCV,
 	uintCV,
 } from '@stacks/transactions';
+import { createContractCallPayload } from '@stacks/transactions/dist/payload';
 import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import worker from '../src/index';
 import { MINIMUM_NOT_FEES, SEND_MANY_NOT_CONTRACT } from '../src/lib/const';
+import { isNeonSponsorable, sponsoredContracts, sponsoredContractsDeployer } from '../src/lib/neon';
 
 const IncomingRequest = Request<unknown, IncomingRequestCfProperties>;
 
@@ -98,6 +104,16 @@ describe('Sponsoring worker - NOT', () => {
 	});
 });
 
+describe('Sponsoring worker - Neon', () => {
+	it('accepts only supported contracts', () => {
+		const tx = new StacksTransaction(
+			TransactionVersion.Mainnet,
+			createSponsoredAuth(createSingleSigSpendingCondition(AddressHashMode.SerializeP2PKH, '', 0, 1000)),
+			createContractCallPayload(sponsoredContractsDeployer, sponsoredContracts[0], 'test', [])
+		);
+		expect(isNeonSponsorable(tx)).toBeTruthy();
+	});
+});
 describe('Sponsoring worker - Status', () => {
 	it('responds with status', async () => {
 		const request = new IncomingRequest('http://localhost/status', {
