@@ -2,14 +2,10 @@
 import { bytesToHex } from '@stacks/common';
 import { StacksMainnet } from '@stacks/network';
 import {
-	AddressHashMode,
 	AnchorMode,
 	PostConditionMode,
-	StacksTransaction,
 	TransactionVersion,
 	TupleCV,
-	createSingleSigSpendingCondition,
-	createSponsoredAuth,
 	getAddressFromPrivateKey,
 	listCV,
 	makeContractCall,
@@ -17,7 +13,6 @@ import {
 	tupleCV,
 	uintCV,
 } from '@stacks/transactions';
-import { createContractCallPayload } from '@stacks/transactions/dist/payload';
 import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import worker from '../src/index';
@@ -105,13 +100,41 @@ describe('Sponsoring worker - NOT', () => {
 });
 
 describe('Sponsoring worker - Neon', () => {
-	it('accepts only supported contracts', () => {
-		const tx = new StacksTransaction(
-			TransactionVersion.Mainnet,
-			createSponsoredAuth(createSingleSigSpendingCondition(AddressHashMode.SerializeP2PKH, '', 0, 1000)),
-			createContractCallPayload(sponsoredContractsDeployer, sponsoredContracts[0], 'test', [])
-		);
+	it('accepts supported contracts', async () => {
+		const tx = await makeContractCall({
+			contractAddress: sponsoredContractsDeployer,
+			contractName: sponsoredContracts[0],
+			functionName: 'test',
+			functionArgs: [],
+			anchorMode: AnchorMode.Any,
+			sponsored: true,
+			senderKey: privateKey,
+		});
 		expect(isNeonSponsorable(tx)).toBeTruthy();
+	});
+
+	it('rejects not supported contracts', async () => {
+		let tx = await makeContractCall({
+			contractAddress: 'SP32AEEF6WW5Y0NMJ1S8SBSZDAY8R5J32NBZFPKKZ',
+			contractName: sponsoredContracts[0],
+			functionName: 'test',
+			functionArgs: [],
+			anchorMode: AnchorMode.Any,
+			sponsored: true,
+			senderKey: privateKey,
+		});
+		expect(isNeonSponsorable(tx)).toBeFalsy();
+
+		tx = await makeContractCall({
+			contractAddress: sponsoredContractsDeployer,
+			contractName: 'testName',
+			functionName: 'testFunction',
+			functionArgs: [],
+			anchorMode: AnchorMode.Any,
+			sponsored: true,
+			senderKey: privateKey,
+		});
+		expect(isNeonSponsorable(tx)).toBeFalsy();
 	});
 });
 describe('Sponsoring worker - Status', () => {

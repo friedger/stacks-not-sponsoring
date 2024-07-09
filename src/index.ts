@@ -21,8 +21,9 @@ import {
 } from '@stacks/transactions';
 import { MINIMUM_NOT_FEES } from './lib/const';
 import { readRequestBody, responseError } from './lib/helpers';
-import { Details, extractDetails, isSponsorable as isNotSponsorable, sponsorTx } from './lib/stacks';
 import { isNeonSponsorable } from './lib/neon';
+import { Details, extractDetails, isSponsorable as isNotSponsorable, sponsorTx } from './lib/stacks';
+import { ExecutionContext } from '@cloudflare/workers-types/experimental';
 const opts = getFetchOptions();
 delete opts.referrerPolicy;
 
