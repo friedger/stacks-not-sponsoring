@@ -11,5 +11,5 @@ const isValidNeonTransaction = (payload: ContractCallPayload) => {
 };
 
 export const isNeonSponsorable = (tx: StacksTransaction) => {
-	return tx.auth.authType === AuthType.Sponsored && isValidNeonTransaction(tx.payload);
+	return tx.auth.authType === AuthType.Sponsored && isValidNeonTransaction(tx.payload as ContractCallPayload);
 };

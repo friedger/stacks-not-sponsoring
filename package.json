@@ -17,6 +17,7 @@
 		"wrangler": "^3.0.0"
 	},
 	"dependencies": {
+		"@stacks/blockchain-api-client": "^7.12.0",
 		"@stacks/common": "^6.13.0",
 		"@stacks/network": "^6.13.0",
 		"@stacks/transactions": "^6.15.0"
