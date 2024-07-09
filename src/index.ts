@@ -21,7 +21,9 @@ import {
 } from '@stacks/transactions';
 import { MINIMUM_NOT_FEES } from './lib/const';
 import { readRequestBody, responseError } from './lib/helpers';
-import { Details, extractDetails, isSponsorable, sponsorTx } from './lib/stacks';
+import { isNeonSponsorable } from './lib/neon';
+import { Details, extractDetails, isSponsorable as isNotSponsorable, sponsorTx } from './lib/stacks';
+import { ExecutionContext } from '@cloudflare/workers-types/experimental';
 const opts = getFetchOptions();
 delete opts.referrerPolicy;
 
@@ -36,6 +38,9 @@ export default {
 			}
 			if (url.pathname === '/not') {
 				return this.sponsorNotTransaction(reqBody, env);
+			}
+			if (url.pathname === '/neon') {
+				return this.sponsorNeonTransaction(reqBody, env);
 			}
 
 			return Response.json(
@@ -77,7 +82,7 @@ export default {
 			return responseError('invalid request');
 		}
 		if (
-			!isSponsorable(
+			!isNotSponsorable(
 				tx,
 				feesInNot,
 				getAddressFromPrivateKey(env.SPONSOR_PRIVATE_KEY, network.isMainnet() ? TransactionVersion.Mainnet : TransactionVersion.Testnet)
@@ -99,6 +104,37 @@ export default {
 			{ headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST' } }
 		);
 	},
+
+	async sponsorNeonTransaction(reqBody: Partial<Details>, env: Env) {
+		// get tx from request
+		const details = await extractDetails(reqBody);
+
+		if (details.error) {
+			return responseError(details.error);
+		}
+		const { tx, network } = details;
+
+		if (!tx || !network) {
+			return responseError('invalid request');
+		}
+		if (!isNeonSponsorable(tx)) {
+			return responseError('not sponsorable');
+		}
+
+		const feeEstimate = await estimateTransactionFeeWithFallback(tx, network);
+		const sponsorNonce = undefined; // TODO manage nonce of sponsor account for save chaining
+		const sponsoredTx = await sponsorTx(tx, network, Number(env.DEV === 'true' ? 0 : feeEstimate), sponsorNonce, env);
+		const result = await broadcastTransaction(sponsoredTx);
+		return Response.json(
+			{
+				feeEstimate,
+				result,
+				txRaw: bytesToHex(sponsoredTx.serialize()),
+			},
+			{ headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST' } }
+		);
+	},
+
 	async getStatus(env: Env) {
 		return Response.json(
 			{
