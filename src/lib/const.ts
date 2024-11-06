@@ -3,4 +3,4 @@ export const SEND_MANY_NOT_CONTRACT = {
 	contractName: 'nope',
 	functionName: 'send-many',
 };
-export const MINIMUM_NOT_FEES = 100_000;
+export const MINIMUM_NOT_FEES = 1_000;
