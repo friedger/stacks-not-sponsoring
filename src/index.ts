@@ -11,20 +11,21 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
+import { ExecutionContext } from '@cloudflare/workers-types/experimental';
+import { AccountsApi, Configuration } from '@stacks/blockchain-api-client';
 import { bytesToHex } from '@stacks/common';
-import { getFetchOptions } from '@stacks/network';
+import { getFetchOptions, StacksNetwork } from '@stacks/network';
 import {
-	TransactionVersion,
 	broadcastTransaction,
 	estimateTransactionFeeWithFallback,
 	getAddressFromPrivateKey,
+	StacksTransaction,
+	TransactionVersion,
 } from '@stacks/transactions';
-import { MINIMUM_NOT_FEES } from './lib/const';
+import { MAX_FEE, MINIMUM_NOT_FEES } from './lib/const';
 import { readRequestBody, responseError } from './lib/helpers';
 import { isNeonSponsorable } from './lib/neon';
 import { Details, extractDetails, isSponsorable as isNotSponsorable, sponsorTx } from './lib/stacks';
-import { ExecutionContext } from '@cloudflare/workers-types/experimental';
-import { AccountsApi, Configuration } from '@stacks/blockchain-api-client';
 const opts = getFetchOptions();
 delete opts.referrerPolicy;
 
@@ -92,7 +93,7 @@ export default {
 			return responseError('not sponsorable');
 		}
 
-		const feeEstimate = await estimateTransactionFeeWithFallback(tx, network);
+		const feeEstimate = await estimateFee(tx, network);
 		const sponsorNonce = undefined; // TODO manage nonce of sponsor account for save chaining
 		const sponsoredTx = await sponsorTx(tx, network, Number(env.DEV === 'true' ? 0 : feeEstimate), sponsorNonce, env);
 		const result = await broadcastTransaction(sponsoredTx);
@@ -122,7 +123,7 @@ export default {
 			return responseError('not sponsorable');
 		}
 
-		const feeEstimate = await estimateTransactionFeeWithFallback(tx, network);
+		const feeEstimate = await estimateFee(tx, network);
 		const sponsorNonce = undefined; // TODO manage nonce of sponsor account for safe chaining
 		const sponsoredTx = await sponsorTx(tx, network, Number(env.DEV === 'true' ? 0 : feeEstimate), sponsorNonce, env);
 		const result = await broadcastTransaction(sponsoredTx);
@@ -166,3 +167,13 @@ export default {
 		);
 	},
 };
+
+async function estimateFee(tx: StacksTransaction, network: StacksNetwork) {
+	const estimatedFee = await estimateTransactionFeeWithFallback(tx, network);
+	// Ensure the fee does not exceed the maximum allowed fee
+	if (typeof estimatedFee === 'bigint') {
+		return estimatedFee > BigInt(MAX_FEE) ? BigInt(MAX_FEE) : estimatedFee;
+	} else {
+		return estimatedFee > MAX_FEE ? MAX_FEE : estimatedFee;
+	}
+}
