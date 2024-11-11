@@ -12,22 +12,14 @@
  */
 
 import { ExecutionContext } from '@cloudflare/workers-types/experimental';
-import { AccountsApi, Configuration } from '@stacks/blockchain-api-client';
-import { bytesToHex } from '@stacks/common';
-import { getFetchOptions, StacksNetwork } from '@stacks/network';
-import {
-	broadcastTransaction,
-	estimateTransactionFeeWithFallback,
-	getAddressFromPrivateKey,
-	StacksTransaction,
-	TransactionVersion,
-} from '@stacks/transactions';
+import { createClient, OperationResponse } from '@stacks/blockchain-api-client';
+import { StacksNetwork } from '@stacks/network';
+import { broadcastTransaction, fetchFeeEstimateTransaction, privateKeyToAddress, transactionToHex } from '@stacks/transactions';
 import { MAX_FEE, MINIMUM_NOT_FEES } from './lib/const';
-import { readRequestBody, responseError } from './lib/helpers';
+import { Details, readRequestBody, responseError } from './lib/helpers';
 import { isNeonSponsorable } from './lib/neon';
-import { Details, extractDetails, isSponsorable as isNotSponsorable, sponsorTx } from './lib/stacks';
-const opts = getFetchOptions();
-delete opts.referrerPolicy;
+import { extractDetails, isSponsorable as isNotSponsorable } from './lib/not';
+import { sponsorTx } from './lib/stacks';
 
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -71,7 +63,7 @@ export default {
 		}
 	},
 
-	async sponsorNotTransaction(reqBody: Partial<Details>, env: Env) {
+	async signAndBroadcastTransaction(sponsoringCheck: (reqBody: Partial<Details>) => boolean, reqBody: Partial<Details>, env: Env) {
 		// get tx from request
 		const details = await extractDetails(reqBody);
 
@@ -83,72 +75,58 @@ export default {
 		if (!tx || !network || !feesInNot) {
 			return responseError('invalid request');
 		}
-		if (
-			!isNotSponsorable(
-				tx,
-				feesInNot,
-				getAddressFromPrivateKey(env.SPONSOR_PRIVATE_KEY, network.isMainnet() ? TransactionVersion.Mainnet : TransactionVersion.Testnet)
-			)
-		) {
+		if (!sponsoringCheck(reqBody)) {
 			return responseError('not sponsorable');
 		}
 
-		const feeEstimate = await estimateFee(tx, network);
+		const feeEstimate = await estimateFee(transactionToHex(tx), network);
 		const sponsorNonce = undefined; // TODO manage nonce of sponsor account for save chaining
 		const sponsoredTx = await sponsorTx(tx, network, Number(env.DEV === 'true' ? 0 : feeEstimate), sponsorNonce, env);
-		const result = await broadcastTransaction(sponsoredTx);
+		const result = await broadcastTransaction({ transaction: sponsoredTx });
 		return Response.json(
 			{
 				feeEstimate,
 				result,
-				txRaw: bytesToHex(sponsoredTx.serialize()),
+				txRaw: transactionToHex(sponsoredTx),
 			},
 			{ headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST' } }
+		);
+	},
+
+	async sponsorNotTransaction(reqBody: Partial<Details>, env: Env) {
+		return this.signAndBroadcastTransaction(
+			({ tx, feesInNot, network }: Partial<Details>) =>
+				tx !== undefined &&
+				feesInNot !== undefined &&
+				network !== undefined &&
+				isNotSponsorable(tx, feesInNot, privateKeyToAddress(env.SPONSOR_PRIVATE_KEY, network)),
+			reqBody,
+			env
 		);
 	},
 
 	async sponsorNeonTransaction(reqBody: Partial<Details>, env: Env) {
-		// get tx from request
-		const details = await extractDetails(reqBody);
-
-		if (details.error) {
-			return responseError(details.error);
-		}
-		const { tx, network } = details;
-
-		if (!tx || !network) {
-			return responseError('invalid request');
-		}
-		if (!isNeonSponsorable(tx)) {
-			return responseError('not sponsorable');
-		}
-
-		const feeEstimate = await estimateFee(tx, network);
-		const sponsorNonce = undefined; // TODO manage nonce of sponsor account for safe chaining
-		const sponsoredTx = await sponsorTx(tx, network, Number(env.DEV === 'true' ? 0 : feeEstimate), sponsorNonce, env);
-		const result = await broadcastTransaction(sponsoredTx);
-		return Response.json(
-			{
-				feeEstimate,
-				result,
-				txRaw: bytesToHex(sponsoredTx.serialize()),
-			},
-			{ headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST' } }
-		);
+		return this.signAndBroadcastTransaction(({ tx }: Partial<Details>) => tx !== undefined && isNeonSponsorable(tx), reqBody, env);
 	},
 
 	async getStatus(env: Env) {
-		const sponsor = getAddressFromPrivateKey(env.SPONSOR_PRIVATE_KEY);
-		const accountsApi = new AccountsApi(
-			new Configuration({
-				basePath: 'https://api.hiro.so',
-			})
-		);
-		let balance;
+		const client = createClient({
+			baseUrl: 'https://api.mainnet.hiro.so',
+		});
+		client.use({
+			onRequest({ request }) {
+				request.headers.set('x-custom-header', 'custom-value');
+				return request;
+			},
+		});
+
+		const sponsor = privateKeyToAddress(env.SPONSOR_PRIVATE_KEY);
+		let balance: OperationResponse['/extended/v1/address/{principal}/balances'] | undefined;
 		try {
-			balance = await accountsApi.getAccountBalance({ principal: sponsor });
+			const response = await client.GET('/extended/v1/address/{principal}/balances', { params: { path: { principal: sponsor } } });
+			balance = response.data;
 		} catch (e) {
-			balance = { stx: 'failed to fetch balance from api node' };
+			console.log(e);
 		}
 		return Response.json(
 			{
@@ -159,7 +137,7 @@ export default {
 				balances: [
 					{
 						sponsor: sponsor,
-						balance: balance.stx,
+						balance: balance?.stx,
 					},
 				],
 			},
@@ -168,12 +146,11 @@ export default {
 	},
 };
 
-async function estimateFee(tx: StacksTransaction, network: StacksNetwork) {
-	const estimatedFee = await estimateTransactionFeeWithFallback(tx, network);
+async function estimateFee(txHex: string, network: StacksNetwork) {
+	const [estimatedFee0, feeEstimate1, feeEstimate2] = await fetchFeeEstimateTransaction({
+		payload: txHex,
+		network,
+	});
 	// Ensure the fee does not exceed the maximum allowed fee
-	if (typeof estimatedFee === 'bigint') {
-		return estimatedFee > BigInt(MAX_FEE) ? BigInt(MAX_FEE) : estimatedFee;
-	} else {
-		return estimatedFee > MAX_FEE ? MAX_FEE : estimatedFee;
-	}
+	return estimatedFee0.fee > MAX_FEE ? MAX_FEE : estimatedFee0;
 }

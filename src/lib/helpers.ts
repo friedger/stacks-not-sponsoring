@@ -1,4 +1,12 @@
-import { Details } from './stacks';
+import { StacksNetwork } from '@stacks/network';
+import { StacksTransactionWire } from '@stacks/transactions';
+
+export type Details = {
+	error: string;
+	tx: StacksTransactionWire;
+	network: StacksNetwork;
+	feesInNot: number;
+};
 
 /**
  * readRequestBody reads in the incoming request body
