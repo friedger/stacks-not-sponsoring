@@ -125,29 +125,40 @@ export default {
 		try {
 			const response = await client.GET('/extended/v1/address/{principal}/balances', { params: { path: { principal: sponsor } } });
 			balance = response.data;
+			return Response.json(
+				{
+					fees: {
+						not: MINIMUM_NOT_FEES,
+						sponsor: [sponsor],
+					},
+					balances: [
+						{
+							sponsor: sponsor,
+							balance: balance?.stx,
+						},
+					],
+					response,
+				},
+				{ headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST' } }
+			);
 		} catch (e) {
 			console.log(e);
-		}
-		return Response.json(
-			{
-				fees: {
-					not: MINIMUM_NOT_FEES,
-					sponsor: [sponsor],
-				},
-				balances: [
-					{
-						sponsor: sponsor,
-						balance: balance?.stx,
+			return Response.json(
+				{
+					fees: {
+						not: MINIMUM_NOT_FEES,
+						sponsor: [sponsor],
 					},
-				],
-			},
-			{ headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST' } }
-		);
+					error: e,
+				},
+				{ headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST' } }
+			);
+		}
 	},
 };
 
 async function estimateFee(txHex: string, network: StacksNetwork) {
-	const [estimatedFee0, feeEstimate1, feeEstimate2] = await fetchFeeEstimateTransaction({
+	const [estimatedFee0] = await fetchFeeEstimateTransaction({
 		payload: txHex,
 		network,
 	});
