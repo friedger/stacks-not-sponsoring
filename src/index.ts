@@ -158,10 +158,10 @@ export default {
 };
 
 async function estimateFee(txHex: string, network: StacksNetwork) {
-	const [estimatedFee0] = await fetchFeeEstimateTransaction({
+	const [_, estimatedFee1] = await fetchFeeEstimateTransaction({
 		payload: txHex,
 		network,
 	});
 	// Ensure the fee does not exceed the maximum allowed fee
-	return estimatedFee0.fee > MAX_FEE ? MAX_FEE : estimatedFee0;
+	return estimatedFee1.fee > MAX_FEE ? MAX_FEE : estimatedFee1.fee;
 }
