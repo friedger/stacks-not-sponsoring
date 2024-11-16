@@ -1,9 +1,9 @@
-import { StacksNetwork } from '@stacks/network';
+import { StacksNetworkName } from '@stacks/network';
 import { StacksTransactionWire, sponsorTransaction } from '@stacks/transactions';
 
 export const sponsorTx = async (
 	tx: StacksTransactionWire,
-	network: StacksNetwork,
+	network: StacksNetworkName,
 	fee: number,
 	sponsorNonce: number | undefined,
 	env: Env

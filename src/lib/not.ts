@@ -25,24 +25,24 @@ const getFeesInNot = (feesInNot: number | string) => {
 
 export const extractDetails = async (requestBody: any): Promise<Partial<Details>> => {
 	const network = requestBody.network;
-	if (requestBody.txHex && network && requestBody.feesInNot) {
+	if (requestBody.tx && network && requestBody.feesInNot) {
 		const feesInNot = getFeesInNot(requestBody.feesInNot);
 		try {
-			const tx = deserializeTransaction(requestBody.txHex);
+			const tx = deserializeTransaction(requestBody.tx);
 			return { tx, network, feesInNot };
 		} catch (e) {
-			return { error: 'Invalid txHex' };
+			return { error: 'Invalid tx, must be hex format' };
 		}
 	}
 
-	return { error: 'expected {txHex: string; network: StacksNetworkName; feesInNot: number }' };
+	return { error: 'expected {tx: string; network: StacksNetworkName; feesInNot: number }' };
 };
 
 export const isValidSendManyNot = (tx: StacksTransactionWire, feesInNot: number, notSponsor: string) => {
 	// expect contract call
 	if (tx.payload.payloadType !== PayloadType.ContractCall) {
 		console.log('not contract call');
-		return false;
+		return { isSponsorable: false, data: { invalidPayloadType: tx.payload.payloadType } };
 	}
 	const payload = tx.payload as ContractCallPayload;
 	// expect send many call
@@ -52,27 +52,29 @@ export const isValidSendManyNot = (tx: StacksTransactionWire, feesInNot: number,
 		payload.functionName.content !== SEND_MANY_NOT_CONTRACT.functionName
 	) {
 		console.log('not correct contract');
-		return false;
+		return { isSponsorable: false, data: { invalidContract: payload } };
 	}
 	// expect receiver entry for sponsor
 	const receivers = payload.functionArgs[0] as ListCV<TupleCV<{ amount: UIntCV; to: PrincipalCV }>>;
 	const sponsorEntry = receivers.value.find((r) => r.value.to.value === notSponsor);
 	if (!sponsorEntry) {
 		console.log(`not paying fees to ${notSponsor}`);
-		return false;
+		return { isSponsorable: false, data: { noSponsorEntry: true } };
 	}
 	// expect at least minimum fee amount
 	const amountForSponsor = Number(sponsorEntry.value.amount.value);
 	if (amountForSponsor < MINIMUM_NOT_FEES) {
 		console.log('not paying enough fees');
-		return false;
+		return { isSponsorable: false, data: { notEnoughFees: amountForSponsor } };
 	}
 	if (amountForSponsor !== feesInNot) {
 		console.log('not paying fees as specified');
-		return false;
+		return { isSponsorable: false, data: { amountForSponsor, feesInNot } };
 	}
-	return true;
+	return { isSponsorable: true, data: { amountForSponsor, feesInNot } };
 };
-export const isSponsorable = (tx: StacksTransactionWire, feesInNot: number, notSponsor: string) => {
-	return tx.auth.authType === AuthType.Sponsored && isValidSendManyNot(tx, feesInNot, notSponsor);
+export const isSponsorable = (tx: StacksTransactionWire, feesInNot: number, notSponsor: string): { isSponsorable: boolean; data: any } => {
+	return tx.auth.authType === AuthType.Sponsored
+		? isValidSendManyNot(tx, feesInNot, notSponsor)
+		: { isSponsorable: false, data: { invalidAuthType: tx.auth.authType } };
 };

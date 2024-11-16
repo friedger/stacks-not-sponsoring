@@ -13,13 +13,26 @@
 
 import { ExecutionContext } from '@cloudflare/workers-types/experimental';
 import { createClient, OperationResponse } from '@stacks/blockchain-api-client';
-import { StacksNetwork } from '@stacks/network';
-import { broadcastTransaction, fetchFeeEstimateTransaction, privateKeyToAddress, transactionToHex } from '@stacks/transactions';
+import { getFetchOptions } from '@stacks/common';
+import { StacksNetworkName } from '@stacks/network';
+import {
+	broadcastTransaction,
+	deserializeTransaction,
+	estimateTransactionByteLength,
+	fetchFeeEstimateTransaction,
+	privateKeyToAddress,
+	serializePayload,
+	StacksTransactionWire,
+	transactionToHex,
+} from '@stacks/transactions';
 import { MAX_FEE, MINIMUM_NOT_FEES } from './lib/const';
-import { Details, readRequestBody, responseError } from './lib/helpers';
+import { Details, readRequestBody, RequestBody, responseError } from './lib/helpers';
 import { isNeonSponsorable } from './lib/neon';
 import { extractDetails, isSponsorable as isNotSponsorable } from './lib/not';
 import { sponsorTx } from './lib/stacks';
+
+const opts = getFetchOptions();
+delete opts.referrerPolicy;
 
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -30,10 +43,10 @@ export default {
 			if (!reqBody) {
 				return responseError('missing request body');
 			}
-			if (url.pathname === '/not') {
+			if (url.pathname === '/not/v1/sponsor') {
 				return this.sponsorNotTransaction(reqBody, env);
 			}
-			if (url.pathname === '/neon') {
+			if (url.pathname === '/neon/v1/sponsor') {
 				return this.sponsorNeonTransaction(reqBody, env);
 			}
 
@@ -44,8 +57,8 @@ export default {
 				{ status: 404 }
 			);
 		} else if (request.method === 'GET') {
-			if (url.pathname === '/status') {
-				return this.getStatus(env);
+			if (url.pathname === 'not/v1/info' || url.pathname === 'neon/v1/info') {
+				return this.getInfo(env);
 			}
 			return Response.json(
 				{
@@ -63,53 +76,99 @@ export default {
 		}
 	},
 
-	async signAndBroadcastTransaction(sponsoringCheck: (reqBody: Partial<Details>) => boolean, reqBody: Partial<Details>, env: Env) {
-		// get tx from request
-		const details = await extractDetails(reqBody);
+	async signAndBroadcastTransaction(
+		sponsoringCheck: (reqBody: Partial<Details>) => { isSponsorable: boolean; data: any },
+		reqBody: Partial<RequestBody>,
+		env: Env
+	) {
+		try {
+			// get tx from request
+			const details = await extractDetails(reqBody);
 
-		if (details.error) {
-			return responseError(details.error);
-		}
-		const { tx, network, feesInNot } = details;
+			if (details.error) {
+				return responseError(details.error);
+			}
+			const { tx, network, feesInNot } = details;
 
-		if (!tx || !network || !feesInNot) {
-			return responseError('invalid request');
-		}
-		if (!sponsoringCheck(reqBody)) {
-			return responseError('not sponsorable');
-		}
+			if (!tx || !network || !feesInNot) {
+				return responseError('invalid request ' + JSON.stringify(details));
+			}
+			const sponsorableCheckResult = sponsoringCheck(details);
+			if (!sponsorableCheckResult.isSponsorable) {
+				return Response.json(
+					{
+						isSponsorable: false,
+						error: 'not sponsorable',
+						errorData: sponsorableCheckResult.data,
+					},
+					{ status: 400, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST' } }
+				);
+			}
 
-		const feeEstimate = await estimateFee(transactionToHex(tx), network);
-		const sponsorNonce = undefined; // TODO manage nonce of sponsor account for save chaining
-		const sponsoredTx = await sponsorTx(tx, network, Number(env.DEV === 'true' ? 0 : feeEstimate), sponsorNonce, env);
-		const result = await broadcastTransaction({ transaction: sponsoredTx });
-		return Response.json(
-			{
-				feeEstimate,
-				result,
-				txRaw: transactionToHex(sponsoredTx),
-			},
-			{ headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST' } }
-		);
+			const feeEstimate = await estimateFee(tx, network);
+			const sponsorNonce = undefined; // TODO manage nonce of sponsor account for save chaining
+			const sponsoredTx = await sponsorTx(tx, network, Number(env.DEV === 'true' ? 0 : feeEstimate), sponsorNonce, env);
+			const result = await broadcastTransaction({ transaction: sponsoredTx });
+			if ('error' in result) {
+				return Response.json(
+					{
+						tx: (reqBody as any).tx,
+						error: result,
+					},
+					{ status: 400, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST' } }
+				);
+			} else {
+				return Response.json(
+					{
+						txid: result.txid,
+						rawTx: transactionToHex(sponsoredTx),
+						feeEstimate,
+						result,
+					},
+					{ headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST' } }
+				);
+			}
+		} catch (e) {
+			return Response.json(
+				{
+					txHex: (reqBody as any).txHex,
+					txHex2: transactionToHex(deserializeTransaction((reqBody as any).txHex)),
+					error: 'execption' + JSON.stringify(e),
+				},
+				{ status: 400, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST' } }
+			);
+		}
 	},
 
-	async sponsorNotTransaction(reqBody: Partial<Details>, env: Env) {
+	async sponsorNotTransaction(reqBody: Partial<RequestBody>, env: Env) {
 		return this.signAndBroadcastTransaction(
 			({ tx, feesInNot, network }: Partial<Details>) =>
-				tx !== undefined &&
-				feesInNot !== undefined &&
-				network !== undefined &&
-				isNotSponsorable(tx, feesInNot, privateKeyToAddress(env.SPONSOR_PRIVATE_KEY, network)),
+				tx !== undefined && feesInNot !== undefined && network !== undefined
+					? isNotSponsorable(tx, feesInNot, privateKeyToAddress(env.SPONSOR_PRIVATE_KEY, network))
+					: {
+							isSponsorable: false,
+							data: reqBody,
+					  },
 			reqBody,
 			env
 		);
 	},
 
-	async sponsorNeonTransaction(reqBody: Partial<Details>, env: Env) {
-		return this.signAndBroadcastTransaction(({ tx }: Partial<Details>) => tx !== undefined && isNeonSponsorable(tx), reqBody, env);
+	async sponsorNeonTransaction(reqBody: Partial<RequestBody>, env: Env) {
+		return this.signAndBroadcastTransaction(
+			({ tx }: Partial<Details>) =>
+				tx !== undefined
+					? isNeonSponsorable(tx)
+					: {
+							isSponsorable: false,
+							data: reqBody,
+					  },
+			reqBody,
+			env
+		);
 	},
 
-	async getStatus(env: Env) {
+	async getInfo(env: Env) {
 		const client = createClient({
 			baseUrl: 'https://api.mainnet.hiro.so',
 		});
@@ -127,6 +186,8 @@ export default {
 			balance = response.data;
 			return Response.json(
 				{
+					active: true,
+					sponsor_addresses: [sponsor],
 					fees: {
 						not: MINIMUM_NOT_FEES,
 						sponsor: [sponsor],
@@ -137,7 +198,6 @@ export default {
 							balance: balance?.stx,
 						},
 					],
-					response,
 				},
 				{ headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST' } }
 			);
@@ -157,9 +217,12 @@ export default {
 	},
 };
 
-async function estimateFee(txHex: string, network: StacksNetwork) {
-	const [_, estimatedFee1] = await fetchFeeEstimateTransaction({
-		payload: txHex,
+async function estimateFee(tx: StacksTransactionWire, network: StacksNetworkName) {
+	let txlength = estimateTransactionByteLength(tx);
+
+	const [estimatedFee1] = await fetchFeeEstimateTransaction({
+		payload: serializePayload(tx.payload),
+		estimatedLength: txlength,
 		network,
 	});
 	// Ensure the fee does not exceed the maximum allowed fee

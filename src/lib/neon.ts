@@ -10,6 +10,8 @@ const isValidNeonTransaction = (payload: ContractCallPayload) => {
 	);
 };
 
-export const isNeonSponsorable = (tx: StacksTransactionWire) => {
-	return tx.auth.authType === AuthType.Sponsored && isValidNeonTransaction(tx.payload as ContractCallPayload);
+export const isNeonSponsorable = (tx: StacksTransactionWire): { isSponsorable: boolean; data: any } => {
+	return tx.auth.authType === AuthType.Sponsored
+		? isValidNeonTransaction(tx.payload as ContractCallPayload)
+		: { isSponsorable: false, data: { invalidAuthType: tx.auth.authType } };
 };
