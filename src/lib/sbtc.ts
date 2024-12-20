@@ -9,7 +9,7 @@ import {
 	UIntCV,
 	addressToString,
 } from '@stacks/transactions';
-import { MINIMUM_NOT_FEES, SBTC_CONTRACT } from './const';
+import { MINIMUM_SBTC_SATS_FEES, SBTC_CONTRACT } from './const';
 
 export const isValidSendManySbtc = (tx: StacksTransactionWire, feesInTokens: number, notSponsor: string) => {
 	// expect contract call
@@ -36,7 +36,7 @@ export const isValidSendManySbtc = (tx: StacksTransactionWire, feesInTokens: num
 	}
 	// expect at least minimum fee amount
 	const amountForSponsor = Number(sponsorEntry.value.amount.value);
-	if (amountForSponsor < MINIMUM_NOT_FEES) {
+	if (amountForSponsor < MINIMUM_SBTC_SATS_FEES) {
 		console.log('not paying enough fees');
 		return { isSponsorable: false, data: { notEnoughFees: amountForSponsor } };
 	}

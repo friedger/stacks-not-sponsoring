@@ -10,4 +10,5 @@ export const SBTC_CONTRACT = {
 	functionName: 'transfer-many',
 };
 export const MINIMUM_NOT_FEES = 10_000;
+export const MINIMUM_SBTC_SATS_FEES = 100;
 export const MAX_FEE = 510_000; // 0.51 STX
