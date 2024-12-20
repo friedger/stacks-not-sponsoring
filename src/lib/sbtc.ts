@@ -8,10 +8,8 @@ import {
 	TupleCV,
 	UIntCV,
 	addressToString,
-	deserializeTransaction,
 } from '@stacks/transactions';
-import { MINIMUM_NOT_FEES, SBTC_CONTRACT, SEND_MANY_NOT_CONTRACT } from './const';
-import { Details } from './helpers';
+import { MINIMUM_NOT_FEES, SBTC_CONTRACT } from './const';
 
 export const isValidSendManySbtc = (tx: StacksTransactionWire, feesInTokens: number, notSponsor: string) => {
 	// expect contract call

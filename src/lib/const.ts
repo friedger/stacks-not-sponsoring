@@ -5,7 +5,7 @@ export const SEND_MANY_NOT_CONTRACT = {
 };
 
 export const SBTC_CONTRACT = {
-	contractAddress: 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token',
+	contractAddress: 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4',
 	contractName: 'sbtc-token',
 	functionName: 'transfer-many',
 };
