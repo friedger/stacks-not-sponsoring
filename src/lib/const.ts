@@ -11,4 +11,4 @@ export const SBTC_CONTRACT = {
 };
 export const MINIMUM_NOT_FEES = 10_000;
 export const MINIMUM_SBTC_SATS_FEES = 100;
-export const MAX_FEE = 510_000; // 0.51 STX
+export const MAX_FEE = 10_000; // 0.01 STX

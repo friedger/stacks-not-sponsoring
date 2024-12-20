@@ -134,6 +134,7 @@ export default {
 				);
 			}
 		} catch (e) {
+			console.log(e);
 			return Response.json(
 				{
 					txHex: (reqBody as any).txHex,
@@ -237,13 +238,19 @@ export default {
 };
 
 async function estimateFee(tx: StacksTransactionWire, network: StacksNetworkName) {
-	let txlength = estimateTransactionByteLength(tx);
-
-	const [estimatedFee1] = await fetchFeeEstimateTransaction({
-		payload: serializePayload(tx.payload),
-		estimatedLength: txlength,
-		network,
-	});
-	// Ensure the fee does not exceed the maximum allowed fee
-	return estimatedFee1.fee > MAX_FEE ? MAX_FEE : estimatedFee1.fee;
+	try {
+		let txlength = estimateTransactionByteLength(tx);
+		const payload = serializePayload(tx.payload);
+		const [estimatedFee1] = await fetchFeeEstimateTransaction({
+			payload,
+			estimatedLength: txlength,
+			network,
+		});
+		console.log({ estimateFee: estimatedFee1.fee });
+		// Ensure the fee does not exceed the maximum allowed fee
+		return estimatedFee1.fee > MAX_FEE ? MAX_FEE : estimatedFee1.fee;
+	} catch (e) {
+		console.log(e);
+		return MAX_FEE;
+	}
 }
