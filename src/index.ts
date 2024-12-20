@@ -26,9 +26,11 @@ import {
 	transactionToHex,
 } from '@stacks/transactions';
 import { MAX_FEE, MINIMUM_NOT_FEES } from './lib/const';
-import { Details, readRequestBody, RequestBody, responseError } from './lib/helpers';
+import { Details, extractDetails, readRequestBody, RequestBody, responseError } from './lib/helpers';
 import { isNeonSponsorable } from './lib/neon';
-import { extractDetails, isSponsorable as isNotSponsorable } from './lib/not';
+import { isSponsorable as isNotSponsorable } from './lib/not';
+import { isSponsorable as isSbtcSponsorable } from './lib/sbtc';
+
 import { sponsorTx } from './lib/stacks';
 
 const opts = getFetchOptions();
@@ -48,6 +50,9 @@ export default {
 			}
 			if (url.pathname === '/neon/v1/sponsor') {
 				return this.sponsorNeonTransaction(reqBody, env);
+			}
+			if (url.pathname === '/sbtc/v1/sponsor') {
+				return this.sponsorSbtcTransaction(reqBody, env);
 			}
 
 			return Response.json(
@@ -88,9 +93,9 @@ export default {
 			if (details.error) {
 				return responseError(details.error);
 			}
-			const { tx, network, feesInNot } = details;
+			const { tx, network, feesInTokens } = details;
 
-			if (!tx || !network || !feesInNot) {
+			if (!tx || !network || !feesInTokens) {
 				return responseError('invalid request ' + JSON.stringify(details));
 			}
 			const sponsorableCheckResult = sponsoringCheck(details);
@@ -142,9 +147,9 @@ export default {
 
 	async sponsorNotTransaction(reqBody: Partial<RequestBody>, env: Env) {
 		return this.signAndBroadcastTransaction(
-			({ tx, feesInNot, network }: Partial<Details>) =>
-				tx !== undefined && feesInNot !== undefined && network !== undefined
-					? isNotSponsorable(tx, feesInNot, privateKeyToAddress(env.SPONSOR_PRIVATE_KEY, network))
+			({ tx, feesInTokens, network }: Partial<Details>) =>
+				tx !== undefined && feesInTokens !== undefined && network !== undefined
+					? isNotSponsorable(tx, feesInTokens, privateKeyToAddress(env.SPONSOR_PRIVATE_KEY, network))
 					: {
 							isSponsorable: false,
 							data: reqBody,
@@ -159,6 +164,20 @@ export default {
 			({ tx }: Partial<Details>) =>
 				tx !== undefined
 					? isNeonSponsorable(tx)
+					: {
+							isSponsorable: false,
+							data: reqBody,
+					  },
+			reqBody,
+			env
+		);
+	},
+
+	async sponsorSbtcTransaction(reqBody: Partial<RequestBody>, env: Env) {
+		return this.signAndBroadcastTransaction(
+			({ tx, feesInTokens, network }: Partial<Details>) =>
+				tx !== undefined && feesInTokens !== undefined && network !== undefined
+					? isSbtcSponsorable(tx, feesInTokens, privateKeyToAddress(env.SPONSOR_PRIVATE_KEY, network))
 					: {
 							isSponsorable: false,
 							data: reqBody,

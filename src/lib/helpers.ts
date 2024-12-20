@@ -1,17 +1,42 @@
 import { StacksNetworkName } from '@stacks/network';
-import { StacksTransactionWire } from '@stacks/transactions';
+import { deserializeTransaction, StacksTransactionWire } from '@stacks/transactions';
 
 export type RequestBody = {
 	tx: string;
 	network: StacksNetworkName;
-	feesInNot: number;
+	feesInTokens: number;
 };
 
 export type Details = {
 	error: string;
 	tx: StacksTransactionWire;
 	network: StacksNetworkName;
-	feesInNot: number;
+	feesInTokens: number; // smallest unit
+};
+
+export const getFeesInTokens = (feesInTokens: number | string) => {
+	if (typeof feesInTokens === 'number') {
+		return feesInTokens;
+	}
+	try {
+		return parseInt(feesInTokens);
+	} catch (e) {}
+	return undefined;
+};
+
+export const extractDetails = async (requestBody: any): Promise<Partial<Details>> => {
+	const network = requestBody.network;
+	if (requestBody.tx && network && requestBody.feesInTokens) {
+		const feesInTokens = getFeesInTokens(requestBody.feesInTokens);
+		try {
+			const tx = deserializeTransaction(requestBody.tx);
+			return { tx, network, feesInTokens };
+		} catch (e) {
+			return { error: 'Invalid tx, must be hex format' };
+		}
+	}
+
+	return { error: 'expected {tx: string; network: StacksNetworkName; feesInTokens: number }' };
 };
 
 /**

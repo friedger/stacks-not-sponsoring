@@ -3,5 +3,11 @@ export const SEND_MANY_NOT_CONTRACT = {
 	contractName: 'nope',
 	functionName: 'send-many',
 };
+
+export const SBTC_CONTRACT = {
+	contractAddress: 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token',
+	contractName: 'sbtc-token',
+	functionName: 'transfer-many',
+};
 export const MINIMUM_NOT_FEES = 10_000;
 export const MAX_FEE = 510_000; // 0.51 STX

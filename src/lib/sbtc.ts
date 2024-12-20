@@ -8,10 +8,12 @@ import {
 	TupleCV,
 	UIntCV,
 	addressToString,
+	deserializeTransaction,
 } from '@stacks/transactions';
-import { MINIMUM_NOT_FEES, SEND_MANY_NOT_CONTRACT } from './const';
+import { MINIMUM_NOT_FEES, SBTC_CONTRACT, SEND_MANY_NOT_CONTRACT } from './const';
+import { Details } from './helpers';
 
-export const isValidSendManyNot = (tx: StacksTransactionWire, feesInTokens: number, notSponsor: string) => {
+export const isValidSendManySbtc = (tx: StacksTransactionWire, feesInTokens: number, notSponsor: string) => {
 	// expect contract call
 	if (tx.payload.payloadType !== PayloadType.ContractCall) {
 		console.log('not contract call');
@@ -20,9 +22,9 @@ export const isValidSendManyNot = (tx: StacksTransactionWire, feesInTokens: numb
 	const payload = tx.payload as ContractCallPayload;
 	// expect send many call
 	if (
-		addressToString(payload.contractAddress) !== SEND_MANY_NOT_CONTRACT.contractAddress ||
-		payload.contractName.content !== SEND_MANY_NOT_CONTRACT.contractName ||
-		payload.functionName.content !== SEND_MANY_NOT_CONTRACT.functionName
+		addressToString(payload.contractAddress) !== SBTC_CONTRACT.contractAddress ||
+		payload.contractName.content !== SBTC_CONTRACT.contractName ||
+		payload.functionName.content !== SBTC_CONTRACT.functionName
 	) {
 		console.log('not correct contract');
 		return { isSponsorable: false, data: { invalidContract: payload } };
@@ -52,6 +54,6 @@ export const isSponsorable = (
 	notSponsor: string
 ): { isSponsorable: boolean; data: any } => {
 	return tx.auth.authType === AuthType.Sponsored
-		? isValidSendManyNot(tx, feesInTokens, notSponsor)
+		? isValidSendManySbtc(tx, feesInTokens, notSponsor)
 		: { isSponsorable: false, data: { invalidAuthType: tx.auth.authType } };
 };
