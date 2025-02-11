@@ -30,7 +30,7 @@ import { Details, extractDetails, readRequestBody, RequestBody, responseError } 
 import { isNeonSponsorable } from './lib/neon';
 import { isSponsorable as isNotSponsorable } from './lib/not';
 import { isSponsorable as isSbtcSponsorable } from './lib/sbtc';
-
+import { isSponsorable as isFakSponsorable } from './lib/fak';
 import { sponsorTx } from './lib/stacks';
 
 const opts = getFetchOptions();
@@ -53,6 +53,9 @@ export default {
 			}
 			if (url.pathname === '/sbtc/v1/sponsor') {
 				return this.sponsorSbtcTransaction(reqBody, env);
+			}
+			if (url.pathname === '/fak/v1/sponsor') {
+				return this.sponsorFakTransaction(reqBody, env);
 			}
 
 			return Response.json(
@@ -179,6 +182,20 @@ export default {
 			({ tx, feesInTokens, network }: Partial<Details>) =>
 				tx !== undefined && feesInTokens !== undefined && network !== undefined
 					? isSbtcSponsorable(tx, feesInTokens, privateKeyToAddress(env.SPONSOR_PRIVATE_KEY, network))
+					: {
+							isSponsorable: false,
+							data: reqBody,
+					  },
+			reqBody,
+			env
+		);
+	},
+
+	async sponsorFakTransaction(reqBody: Partial<RequestBody>, env: Env) {
+		return this.signAndBroadcastTransaction(
+			({ tx, feesInTokens, network }: Partial<Details>) =>
+				tx !== undefined && network !== undefined
+					? isFakSponsorable(tx, privateKeyToAddress(env.SPONSOR_PRIVATE_KEY, network))
 					: {
 							isSponsorable: false,
 							data: reqBody,
