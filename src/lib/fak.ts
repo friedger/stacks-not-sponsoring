@@ -1,4 +1,5 @@
 import {
+	addressToString,
 	AuthType,
 	ContractCallPayload,
 	PayloadType,
@@ -14,8 +15,8 @@ const isValidFakTransaction = (tx: StacksTransactionWire, notSponsor: string) =>
 		return { isSponsorable: false, data: { invalidPayloadType: tx.payload.payloadType } };
 	}
 	const payload = tx.payload as ContractCallPayload;
-	const contractAddress = serializeAddress(payload.contractAddress);
-	const contractName = serializeLPString(payload.contractName);
+	const contractAddress = addressToString(payload.contractAddress);
+	const contractName = payload.contractName.content;
 	if (
 		contractAddress === 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22' &&
 		(contractName === 'buy-with-aibtc-faktory' || contractName === 'buy-with-velar-faktory' || contractName === 'buy-with-btc-faktory')

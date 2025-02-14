@@ -140,8 +140,8 @@ export default {
 			console.log(e);
 			return Response.json(
 				{
-					txHex: (reqBody as any).txHex,
-					txHex2: transactionToHex(deserializeTransaction((reqBody as any).txHex)),
+					txHex: (reqBody as any).tx,
+					txHex2: transactionToHex(deserializeTransaction((reqBody as any).tx)),
 					error: 'execption' + JSON.stringify(e),
 				},
 				{ status: 400, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST' } }
