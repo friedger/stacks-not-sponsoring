@@ -99,7 +99,7 @@ export default {
 			const { tx, network, feesInTokens } = details;
 
 			if (!tx || !network || !feesInTokens) {
-				return responseError('invalid request ' + JSON.stringify(details));
+				return responseError('invalid request, valid tx? ' + !tx + ' valid network? ' + !network + ' valid feesInTokens? ' + !feesInTokens);
 			}
 			const sponsorableCheckResult = sponsoringCheck(details);
 			if (!sponsorableCheckResult.isSponsorable) {
