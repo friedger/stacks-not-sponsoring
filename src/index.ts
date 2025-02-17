@@ -142,7 +142,7 @@ export default {
 				{
 					txHex: (reqBody as any).tx,
 					txHex2: transactionToHex(deserializeTransaction((reqBody as any).tx)),
-					error: 'execption' + JSON.stringify(e),
+					error: 'execption ' + e,
 				},
 				{ status: 400, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST' } }
 			);
