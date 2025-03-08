@@ -31,6 +31,7 @@ import { isNeonSponsorable } from './lib/neon';
 import { isSponsorable as isNotSponsorable } from './lib/not';
 import { isSponsorable as isSbtcSponsorable } from './lib/sbtc';
 import { isSponsorable as isFakSponsorable } from './lib/fak';
+import { isSponsorable as isSmartWalletSBtcSponsorable } from './lib/smart-wallet-sbtc';
 import { sponsorTx } from './lib/stacks';
 
 const opts = getFetchOptions();
@@ -57,6 +58,9 @@ export default {
 			if (url.pathname === '/fak/v1/sponsor') {
 				return this.sponsorFakTransaction(reqBody, env);
 			}
+			if (url.pathname === '/smart-wallet-sbtc/v1/sponsor') {
+				return this.sponsorSmartWalletSBtcTransaction(reqBody, env);
+			}
 
 			return Response.json(
 				{
@@ -65,12 +69,12 @@ export default {
 				{ status: 404 }
 			);
 		} else if (request.method === 'GET') {
-			if (url.pathname === 'not/v1/info' || url.pathname === 'neon/v1/info') {
+			if (url.pathname === '/not/v1/info' || url.pathname === '/neon/v1/info') {
 				return this.getInfo(env);
 			}
 			return Response.json(
 				{
-					error: 'unsupported url. try /status',
+					error: 'unsupported url. try not/v1/info instead of ' + url.pathname,
 				},
 				{ status: 404 }
 			);
@@ -116,7 +120,7 @@ export default {
 			const feeEstimate = await estimateFee(tx, network);
 			const sponsorNonce = undefined; // TODO manage nonce of sponsor account for save chaining
 			const sponsoredTx = await sponsorTx(tx, network, Number(env.DEV === 'true' ? 0 : feeEstimate), sponsorNonce, env);
-			const result = await broadcastTransaction({ transaction: sponsoredTx });
+			const result = await broadcastTransaction({ transaction: sponsoredTx, network });
 			if ('error' in result) {
 				return Response.json(
 					{
@@ -196,6 +200,20 @@ export default {
 			({ tx, feesInTokens, network }: Partial<Details>) =>
 				tx !== undefined && network !== undefined
 					? isFakSponsorable(tx, privateKeyToAddress(env.SPONSOR_PRIVATE_KEY, network))
+					: {
+							isSponsorable: false,
+							data: reqBody,
+					  },
+			reqBody,
+			env
+		);
+	},
+
+	async sponsorSmartWalletSBtcTransaction(reqBody: Partial<RequestBody>, env: Env) {
+		return this.signAndBroadcastTransaction(
+			({ tx, feesInTokens, network }: Partial<Details>) =>
+				tx !== undefined && network !== undefined && feesInTokens !== undefined
+					? isSmartWalletSBtcSponsorable(tx, feesInTokens, privateKeyToAddress(env.SPONSOR_PRIVATE_KEY, network))
 					: {
 							isSponsorable: false,
 							data: reqBody,
