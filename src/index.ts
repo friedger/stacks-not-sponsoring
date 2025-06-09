@@ -11,7 +11,6 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
-import { ExecutionContext } from '@cloudflare/workers-types/experimental';
 import { createClient, OperationResponse } from '@stacks/blockchain-api-client';
 import { getFetchOptions } from '@stacks/common';
 import { StacksNetworkName } from '@stacks/network';
@@ -32,6 +31,7 @@ import { isSponsorable as isNotSponsorable } from './lib/not';
 import { isSponsorable as isSbtcSponsorable } from './lib/sbtc';
 import { isSponsorable as isFakSponsorable } from './lib/fak';
 import { isSponsorable as isSmartWalletSBtcSponsorable } from './lib/smart-wallet-sbtc';
+import { isSponsorable as isDaoSponsorable } from './lib/dao';
 import { sponsorTx } from './lib/stacks';
 
 const opts = getFetchOptions();
@@ -60,6 +60,9 @@ export default {
 			}
 			if (url.pathname === '/smart-wallet-sbtc/v1/sponsor') {
 				return this.sponsorSmartWalletSBtcTransaction(reqBody, env);
+			}
+			if (url.pathname === '/dao/v1/sponsor') {
+				return this.sponsorDaoTransactions(reqBody, env);
 			}
 
 			return Response.json(
@@ -214,6 +217,20 @@ export default {
 			({ tx, feesInTokens, network }: Partial<Details>) =>
 				tx !== undefined && network !== undefined && feesInTokens !== undefined
 					? isSmartWalletSBtcSponsorable(tx, feesInTokens, privateKeyToAddress(env.SPONSOR_PRIVATE_KEY, network))
+					: {
+							isSponsorable: false,
+							data: reqBody,
+					  },
+			reqBody,
+			env
+		);
+	},
+
+	async sponsorDaoTransactions(reqBody: Partial<RequestBody>, env: Env) {
+		return this.signAndBroadcastTransaction(
+			({ tx, network }: Partial<Details>) =>
+				tx !== undefined && network !== undefined
+					? isDaoSponsorable(tx, env.DAO_DEPLOYER, network)
 					: {
 							isSponsorable: false,
 							data: reqBody,
