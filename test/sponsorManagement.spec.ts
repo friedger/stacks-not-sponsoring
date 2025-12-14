@@ -1,60 +1,67 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { SponsorManagement } from '../src/sponsorManagement';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { SponsorManagementLogic, SponsorState, StorageInterface } from '../src/sponsorManagementLogic';
 
-describe('SponsorManagement', () => {
-	let sponsorManagement: SponsorManagement;
-	let storageMock: any;
+describe('SponsorManagementLogic', () => {
+    let sponsorManagement: SponsorManagementLogic;
+    let mockStorage: StorageInterface;
 
-	beforeEach(() => {
-		storageMock = {
-			get: jest.fn(),
-			put: jest.fn(),
-		};
-		sponsorManagement = new SponsorManagement({ storage: storageMock });
-	});
+    beforeEach(() => {
+        mockStorage = {
+            get: vi.fn(),
+            put: vi.fn(),
+        };
+        sponsorManagement = new SponsorManagementLogic(mockStorage);
+    });
 
-	it('should reserve and update nonces correctly', async () => {
-		// Setup initial state
-		const sponsorIndex = 0;
-		const initialNonce = 100;
-		const state = {
-			nextIndex: sponsorIndex,
-			nonces: [[initialNonce, initialNonce + 1], [], [], [], [], [], [], [], [], []],
-			reservedNonces: [[], [], [], [], [], [], [], [], [], []],
-			maxNonces: [initialNonce + 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-		};
-		storageMock.get.mockResolvedValueOnce(state);
+    it('should reserve and update nonces correctly', async () => {
+        const sponsorIndex = 0;
+        const initialNonce = 100;
+        const state: SponsorState = {
+            nextIndex: sponsorIndex,
+            nonces: [[initialNonce, initialNonce + 1], [], [], [], [], [], [], [], [], []],
+            reservedNonces: [[], [], [], [], [], [], [], [], [], []],
+            maxNonces: [initialNonce + 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        };
 
-		// Reserve a nonce
-		await sponsorManagement.getSponsorNonce();
+        vi.mocked(mockStorage.get).mockResolvedValueOnce(state);
 
-		// Should move nonce from nonces to reservedNonces
-		expect(state.nonces[sponsorIndex].length).toBe(2); // one shifted, one pushed
-		expect(state.reservedNonces[sponsorIndex].length).toBe(1);
+        // Reserve a nonce
+        const result = await sponsorManagement.getSponsorNonce();
 
-		// Now test updateNonce for used nonce (should remove from reserved, not add back)
-		storageMock.get.mockResolvedValueOnce(state);
-		await sponsorManagement.updateNonce(sponsorIndex, initialNonce, 'txid');
-		expect(state.reservedNonces[sponsorIndex]).not.toContain(initialNonce);
+        expect(result.nonce).toBe(initialNonce);
+        expect(result.sponsorIndex).toBe(sponsorIndex);
+        expect(state.nonces[sponsorIndex].length).toBe(2);
+        expect(state.reservedNonces[sponsorIndex].length).toBe(1);
+        expect(state.reservedNonces[sponsorIndex]).toContain(initialNonce);
 
-		// Now test updateNonce for unused nonce (should remove from reserved, add back to nonces in order)
-		state.reservedNonces[sponsorIndex].push(initialNonce + 1);
-		storageMock.get.mockResolvedValueOnce(state);
-		await sponsorManagement.updateNonce(sponsorIndex, initialNonce + 1, undefined);
-		expect(state.reservedNonces[sponsorIndex]).not.toContain(initialNonce + 1);
-		expect(state.nonces[sponsorIndex]).toContain(initialNonce + 1);
-		// Should be in order
-		expect(state.nonces[sponsorIndex]).toEqual(state.nonces[sponsorIndex].slice().sort((a, b) => a - b));
-	});
+        // Test updateNonce for used nonce
+        vi.mocked(mockStorage.get).mockResolvedValueOnce(state);
+        await sponsorManagement.updateNonce(sponsorIndex, initialNonce, 'txid');
+        expect(state.reservedNonces[sponsorIndex]).not.toContain(initialNonce);
 
-	it('should throw if no nonces available', async () => {
-		const state = {
-			nextIndex: 0,
-			nonces: [[], [], [], [], [], [], [], [], [], []],
-			reservedNonces: [[], [], [], [], [], [], [], [], [], []],
-			maxNonces: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-		};
-		storageMock.get.mockResolvedValueOnce(state);
-		await expect(sponsorManagement.getSponsorNonce()).rejects.toThrow('No nonces available for this sponsor');
-	});
+        // Test updateNonce for unused nonce
+        state.reservedNonces[sponsorIndex].push(initialNonce + 1);
+        vi.mocked(mockStorage.get).mockResolvedValueOnce(state);
+        await sponsorManagement.updateNonce(sponsorIndex, initialNonce + 1, undefined);
+        expect(state.reservedNonces[sponsorIndex]).not.toContain(initialNonce + 1);
+        expect(state.nonces[sponsorIndex]).toContain(initialNonce + 1);
+        expect(state.nonces[sponsorIndex]).toEqual(state.nonces[sponsorIndex].slice().sort((a, b) => a - b));
+    });
+
+    it('should throw if no nonces available', async () => {
+        const state: SponsorState = {
+            nextIndex: 0,
+            nonces: [[], [], [], [], [], [], [], [], [], []],
+            reservedNonces: [[], [], [], [], [], [], [], [], [], []],
+            maxNonces: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        };
+
+        vi.mocked(mockStorage.get).mockResolvedValueOnce(state);
+        await expect(sponsorManagement.getSponsorNonce()).rejects.toThrow('No nonces available for this sponsor');
+    });
+
+    it('should throw if sponsor state not found on update', async () => {
+        vi.mocked(mockStorage.get).mockResolvedValueOnce(undefined);
+        await expect(sponsorManagement.updateNonce(0, 100, 'txid')).rejects.toThrow('Sponsor state not found');
+    });
 });
