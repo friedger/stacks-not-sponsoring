@@ -7,5 +7,7 @@ export default defineWorkersConfig({
 				wrangler: { configPath: './wrangler.toml' },
 			},
 		},
+		// Only run Cloudflare-specific tests with workers pool
+		include: ['test/index.spec.ts'],
 	},
 });

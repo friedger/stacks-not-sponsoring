@@ -1,155 +1,127 @@
-// test/index.spec.ts
-import { bytesToHex } from '@stacks/common';
-import { StacksMainnet } from '@stacks/network';
-import {
-	AnchorMode,
-	PostConditionMode,
-	TransactionVersion,
-	TupleCV,
-	getAddressFromPrivateKey,
-	listCV,
-	makeContractCall,
-	principalCV,
-	tupleCV,
-	uintCV,
-} from '@stacks/transactions';
-import { createExecutionContext, env, waitOnExecutionContext } from 'cloudflare:test';
+import { StacksNetworkName } from '@stacks/network';
+import { Cl, PostConditionMode, TupleCV, getAddressFromPrivateKey, makeContractCall } from '@stacks/transactions';
+import { SELF } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
-import worker from '../src/index';
 import { MINIMUM_NOT_FEES, SEND_MANY_NOT_CONTRACT } from '../src/lib/const';
-import { isNeonSponsorable, sponsoredContracts, sponsoredContractsDeployer } from '../src/lib/neon';
 
-const IncomingRequest = Request<unknown, IncomingRequestCfProperties>;
+const network: StacksNetworkName = 'mainnet';
 
 const privateKey = '753b7cc01a1a2e86221266a154af739463fce51219d97e4f856cd7200c3bd2a601'; // from devnet toml
-const NOT_SPONSOR = getAddressFromPrivateKey(privateKey, TransactionVersion.Mainnet); // SP1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRCBGD7R
+const NOT_SPONSOR = getAddressFromPrivateKey(privateKey, network); // SP1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRCBGD7R
+
 const sendSendMany = async (receivers: TupleCV[], feesInNot: number) => {
-	const { contractAddress, contractName, functionName } = SEND_MANY_NOT_CONTRACT;
-	const tx = await makeContractCall({
-		contractAddress,
-		contractName,
-		functionName,
-		functionArgs: [listCV(receivers)],
-		senderKey: privateKey,
-		nonce: 0,
-		fee: 0,
-		network: new StacksMainnet(),
-		sponsored: true,
-		postConditionMode: PostConditionMode.Allow,
-		anchorMode: AnchorMode.Any,
-	});
-	const txHex = bytesToHex(tx.serialize());
-	const request = new IncomingRequest('http://localhost/not', {
-		body: JSON.stringify({
-			txHex,
-			network: 'mainnet',
-			feesInNot,
-		}),
-		headers: {
-			'content-type': 'text/plain',
-		},
-		method: 'POST',
-	});
-	// Create an empty context to pass to `worker.fetch()`.
-	const ctx = createExecutionContext();
-	const response = await worker.fetch(request, env, ctx);
-	// Wait for all `Promise`s passed to `ctx.waitUntil()` to settle before running test assertions
-	await waitOnExecutionContext(ctx);
-	return response;
+    const { contractAddress, contractName, functionName } = SEND_MANY_NOT_CONTRACT;
+    const tx = await makeContractCall({
+        contractAddress,
+        contractName,
+        functionName,
+        functionArgs: [Cl.list(receivers)],
+        senderKey: privateKey,
+        nonce: 0,
+        fee: 0,
+        network,
+        sponsored: true,
+        postConditionMode: PostConditionMode.Allow,
+    });
+    const txHex = tx.serialize();
+
+    const response = await SELF.fetch('http://localhost/not', {
+        body: JSON.stringify({
+            txHex,
+            network: 'mainnet',
+            feesInNot,
+        }),
+        headers: {
+            'content-type': 'application/json',
+        },
+        method: 'POST',
+    });
+
+    return response;
 };
 
 describe('Sponsoring worker - NOT', () => {
-	it('responds with sponsored transaction', async () => {
-		const feesInNot = MINIMUM_NOT_FEES;
-		const receivers = [
-			tupleCV({ to: principalCV('SP32AEEF6WW5Y0NMJ1S8SBSZDAY8R5J32NBZFPKKZ'), amount: uintCV(100) }),
-			tupleCV({ to: principalCV(NOT_SPONSOR), amount: uintCV(feesInNot) }),
-		];
-		const response = await sendSendMany(receivers, feesInNot);
-		const result = ((await response.json()) as any).result;
-		expect(result).toHaveProperty('error', 'transaction rejected');
-		expect(result).toHaveProperty('reason', 'FeeTooLow');
-	});
+    it('responds with sponsored transaction', async () => {
+        const feesInNot = MINIMUM_NOT_FEES;
+        const receivers = [
+            Cl.tuple({ to: Cl.principal('SP32AEEF6WW5Y0NMJ1S8SBSZDAY8R5J32NBZFPKKZ'), amount: Cl.uint(100) }),
+            Cl.tuple({ to: Cl.principal(NOT_SPONSOR), amount: Cl.uint(feesInNot) }),
+        ];
+        const response = await sendSendMany(receivers, feesInNot);
+        const result = ((await response.json()) as any).result;
+        expect(result).toHaveProperty('error', 'transaction rejected');
+        expect(result).toHaveProperty('reason', 'FeeTooLow');
+    });
 
-	it('responds with sponsored transaction if sponsor is not last', async () => {
-		const feesInNot = MINIMUM_NOT_FEES;
-		const receivers = [
-			tupleCV({ to: principalCV(NOT_SPONSOR), amount: uintCV(feesInNot) }),
-			tupleCV({ to: principalCV('SP32AEEF6WW5Y0NMJ1S8SBSZDAY8R5J32NBZFPKKZ'), amount: uintCV(100) }),
-		];
-		const response = await sendSendMany(receivers, feesInNot);
-		const result = ((await response.json()) as any).result;
-		expect(result).toHaveProperty('error', 'transaction rejected');
-		expect(result).toHaveProperty('reason', 'FeeTooLow');
-	});
-	it('responds with error if fees are too low', async () => {
-		const feesInNot = MINIMUM_NOT_FEES - 1;
-		const receivers = [
-			tupleCV({ to: principalCV(NOT_SPONSOR), amount: uintCV(feesInNot) }),
-			tupleCV({ to: principalCV('SP32AEEF6WW5Y0NMJ1S8SBSZDAY8R5J32NBZFPKKZ'), amount: uintCV(100) }),
-		];
-		const response = await sendSendMany(receivers, feesInNot);
-		expect(await response.text()).toMatchInlineSnapshot(`"{"error":"not sponsorable"}"`);
-	});
-	it('responds with error if not entry for sponsor', async () => {
-		const feesInNot = MINIMUM_NOT_FEES - 1;
-		const receivers = [tupleCV({ to: principalCV('SP32AEEF6WW5Y0NMJ1S8SBSZDAY8R5J32NBZFPKKZ'), amount: uintCV(100) })];
-		const response = await sendSendMany(receivers, feesInNot);
-		expect(await response.text()).toMatchInlineSnapshot(`"{"error":"not sponsorable"}"`);
-	});
+    it('responds with sponsored transaction if sponsor is not last', async () => {
+        const feesInNot = MINIMUM_NOT_FEES;
+        const receivers = [
+            Cl.tuple({ to: Cl.principal(NOT_SPONSOR), amount: Cl.uint(feesInNot) }),
+            Cl.tuple({ to: Cl.principal('SP32AEEF6WW5Y0NMJ1S8SBSZDAY8R5J32NBZFPKKZ'), amount: Cl.uint(100) }),
+        ];
+        const response = await sendSendMany(receivers, feesInNot);
+        const result = ((await response.json()) as any).result;
+        expect(result).toHaveProperty('error', 'transaction rejected');
+        expect(result).toHaveProperty('reason', 'FeeTooLow');
+    });
+
+    it('responds with error if fees are too low', async () => {
+        const feesInNot = MINIMUM_NOT_FEES - 1;
+        const receivers = [
+            Cl.tuple({ to: Cl.principal(NOT_SPONSOR), amount: Cl.uint(feesInNot) }),
+            Cl.tuple({ to: Cl.principal('SP32AEEF6WW5Y0NMJ1S8SBSZDAY8R5J32NBZFPKKZ'), amount: Cl.uint(100) }),
+        ];
+        const response = await sendSendMany(receivers, feesInNot);
+        expect(await response.text()).toMatchInlineSnapshot(`"{"error":"not sponsorable"}"`);
+    });
+
+    it('responds with error if not entry for sponsor', async () => {
+        const feesInNot = MINIMUM_NOT_FEES - 1;
+        const receivers = [Cl.tuple({ to: Cl.principal('SP32AEEF6WW5Y0NMJ1S8SBSZDAY8R5J32NBZFPKKZ'), amount: Cl.uint(100) })];
+        const response = await sendSendMany(receivers, feesInNot);
+        expect(await response.text()).toMatchInlineSnapshot(`"{"error":"not sponsorable"}"`);
+    });
 });
 
-describe('Sponsoring worker - Neon', () => {
-	it('accepts supported contracts', async () => {
-		const tx = await makeContractCall({
-			contractAddress: sponsoredContractsDeployer,
-			contractName: sponsoredContracts[0],
-			functionName: 'test',
-			functionArgs: [],
-			anchorMode: AnchorMode.Any,
-			sponsored: true,
-			senderKey: privateKey,
-		});
-		expect(isNeonSponsorable(tx)).toBeTruthy();
-	});
-
-	it('rejects not supported contracts', async () => {
-		let tx = await makeContractCall({
-			contractAddress: 'SP32AEEF6WW5Y0NMJ1S8SBSZDAY8R5J32NBZFPKKZ',
-			contractName: sponsoredContracts[0],
-			functionName: 'test',
-			functionArgs: [],
-			anchorMode: AnchorMode.Any,
-			sponsored: true,
-			senderKey: privateKey,
-		});
-		expect(isNeonSponsorable(tx)).toBeFalsy();
-
-		tx = await makeContractCall({
-			contractAddress: sponsoredContractsDeployer,
-			contractName: 'testName',
-			functionName: 'testFunction',
-			functionArgs: [],
-			anchorMode: AnchorMode.Any,
-			sponsored: true,
-			senderKey: privateKey,
-		});
-		expect(isNeonSponsorable(tx)).toBeFalsy();
-	});
-});
 describe('Sponsoring worker - Status', () => {
-	it('responds with status', async () => {
-		const request = new IncomingRequest('http://localhost/status', {
-			headers: {
-				'content-type': 'text/plain',
-			},
-			method: 'GET',
-		});
-		// Create an empty context to pass to `worker.fetch()`.
-		const ctx = createExecutionContext();
-		const response = await worker.fetch(request, env, ctx);
-		// Wait for all `Promise`s passed to `ctx.waitUntil()` to settle before running test assertions
-		await waitOnExecutionContext(ctx);
-		expect(await response.text()).toMatchInlineSnapshot(`"{"fees":{"not":100000,"sponsor":"SP1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRCBGD7R"}}"`);
-	});
+    it('responds with status', async () => {
+        const response = await SELF.fetch('http://localhost/status', {
+            headers: {
+                'content-type': 'text/plain',
+            },
+            method: 'GET',
+        });
+        expect(await response.text()).toMatchInlineSnapshot(`"{"fees":{"not":100000,"sponsor":"SP1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRCBGD7R"}}"`);
+    });
+});
+
+describe('Sponsoring worker - Integration', () => {
+    it('responds to status endpoint using SELF', async () => {
+        const response = await SELF.fetch('http://localhost/status', {
+            method: 'GET',
+        });
+        expect(response.status).toBe(200);
+    });
+
+    it('responds with error for invalid POST to /not', async () => {
+        const response = await SELF.fetch('http://localhost/not', {
+            body: JSON.stringify({
+                txHex: 'invalid',
+                network: 'mainnet',
+                feesInNot: 100000,
+            }),
+            headers: {
+                'content-type': 'application/json',
+            },
+            method: 'POST',
+        });
+        expect(response.status).toBe(400);
+    });
+
+    it('responds with 405 for unsupported methods', async () => {
+        const response = await SELF.fetch('http://localhost/status', {
+            method: 'PUT',
+        });
+        expect(response.status).toBe(405);
+    });
 });
