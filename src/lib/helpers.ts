@@ -46,8 +46,7 @@ export const extractDetails = async (requestBody: any): Promise<Partial<Details>
  */
 export async function readRequestBody(request: Request): Promise<Partial<RequestBody> | undefined> {
 	const contentType = request.headers.get('content-type');
-	if (contentType === null) {
-	} else if (contentType.includes('text/plain')) {
+	if (contentType?.includes('text/plain') || contentType?.includes('application/json')) {
 		return JSON.parse(await request.text());
 	}
 

@@ -5,9 +5,13 @@ export default defineWorkersConfig({
 		poolOptions: {
 			workers: {
 				wrangler: { configPath: './wrangler.toml' },
+				miniflare: {
+					durableObjects: {
+						SPONSOR_MANAGEMENT: 'SponsorManagement',
+					},
+				},
 			},
 		},
-		// Only run Cloudflare-specific tests with workers pool
 		include: ['test/index.spec.ts'],
 	},
 });

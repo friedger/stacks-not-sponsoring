@@ -1,6 +1,5 @@
 import { StacksNetworkName } from '@stacks/network';
 import { StacksTransactionWire, privateKeyToAddress, sponsorTransaction } from '@stacks/transactions';
-import { get } from 'node:http';
 
 export const sponsorTx = async (
 	tx: StacksTransactionWire,
@@ -21,7 +20,8 @@ export const sponsorTx = async (
 };
 
 const getSponsorPrivateKey = (env: Env, sponsorIndex: number) => {
-	return env.SPONSOR_PRIVATE_KEY_ARRAY ? env.SPONSOR_PRIVATE_KEY_ARRAY[sponsorIndex] || env.SPONSOR_PRIVATE_KEY : env.SPONSOR_PRIVATE_KEY;
+	const sponsorKeys: string[] = env.SPONSOR_PRIVATE_KEY_CSV.split(',');
+	return sponsorKeys.length > 0 ? sponsorKeys[sponsorIndex] || env.SPONSOR_PRIVATE_KEY : env.SPONSOR_PRIVATE_KEY;
 };
 
 export const getSponsorAddress = (env: Env, sponsorIndex: number) => {

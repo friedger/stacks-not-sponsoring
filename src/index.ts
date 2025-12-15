@@ -11,7 +11,6 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
-import { createClient, OperationResponse } from '@stacks/blockchain-api-client';
 import { getFetchOptions } from '@stacks/common';
 import { StacksNetworkName } from '@stacks/network';
 import {
@@ -25,13 +24,13 @@ import {
 	transactionToHex,
 } from '@stacks/transactions';
 import { MAX_FEE, MINIMUM_NOT_FEES } from './lib/const';
+import { isSponsorable as isDaoSponsorable } from './lib/dao';
+import { isSponsorable as isFakSponsorable } from './lib/fak';
 import { Details, extractDetails, readRequestBody, RequestBody, responseError } from './lib/helpers';
 import { isNeonSponsorable } from './lib/neon';
 import { isSponsorable as isNotSponsorable } from './lib/not';
 import { isSponsorable as isSbtcSponsorable } from './lib/sbtc';
-import { isSponsorable as isFakSponsorable } from './lib/fak';
 import { isSponsorable as isSmartWalletSBtcSponsorable } from './lib/smart-wallet-sbtc';
-import { isSponsorable as isDaoSponsorable } from './lib/dao';
 import { sponsorTx } from './lib/stacks';
 import { SponsorManagement } from './sponsorManagement';
 
@@ -68,7 +67,7 @@ export default {
 
 			return Response.json(
 				{
-					error: 'unsupported url. try /not',
+					error: 'unsupported url. try not/v1/info instead of ' + url.pathname,
 				},
 				{ status: 404 }
 			);
@@ -128,8 +127,8 @@ export default {
 			}
 
 			// Get next nonce from sponsor management
-			const nonceResult = await sponsorManagement.getSponsorNonce();
-			sponsorIndex = nonceResult.sponsorIndex;
+			// const nonceResult = await sponsorManagement.getSponsorNonce();
+			sponsorIndex = 0; //nonceResult.sponsorIndex;
 			sponsorNonce = undefined;
 
 			const feeEstimate = await estimateFee(tx, network);
@@ -271,18 +270,7 @@ export default {
 	},
 
 	async getInfo(env: Env) {
-		const client = createClient({
-			baseUrl: 'https://api.mainnet.hiro.so',
-		});
-		client.use({
-			onRequest({ request }) {
-				request.headers.set('x-custom-header', 'custom-value');
-				return request;
-			},
-		});
-
 		const sponsor = privateKeyToAddress(env.SPONSOR_PRIVATE_KEY);
-		let balance: OperationResponse['/extended/v1/address/{principal}/balances'] | undefined;
 
 		// Get sponsor management state
 		const sponsorManagementId = env.SPONSOR_MANAGEMENT.idFromName('default');
@@ -293,62 +281,28 @@ export default {
 		} catch (e) {
 			console.log('Failed to get sponsor state:', e);
 		}
-
-		try {
-			const response = await client.GET('/extended/v1/address/{principal}/balances', { params: { path: { principal: sponsor } } });
-			balance = response.data;
-			return Response.json(
-				{
-					active: true,
-					sponsor_addresses: [sponsor],
-					fees: {
-						not: MINIMUM_NOT_FEES,
-						sponsor: [sponsor],
-					},
-					balances: [
-						{
-							sponsor: sponsor,
-							balance: balance?.stx,
-						},
-					],
-					nonceManagement: sponsorState
-						? {
-								nextSponsorIndex: sponsorState.nextIndex,
-								sponsors: sponsorState.nonces.map((nonces, index) => ({
-									index,
-									availableNonces: nonces,
-									reservedNonces: sponsorState.reservedNonces[index],
-									maxNonce: sponsorState.maxNonces[index],
-								})),
-						  }
-						: undefined,
+		return Response.json(
+			{
+				active: true,
+				sponsor_addresses: [sponsor],
+				fees: {
+					not: MINIMUM_NOT_FEES,
+					sponsor: [sponsor],
 				},
-				{ headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST' } }
-			);
-		} catch (e) {
-			console.log(e);
-			return Response.json(
-				{
-					fees: {
-						not: MINIMUM_NOT_FEES,
-						sponsor: [sponsor],
-					},
-					nonceManagement: sponsorState
-						? {
-								nextSponsorIndex: sponsorState.nextIndex,
-								sponsors: sponsorState.nonces.map((nonces, index) => ({
-									index,
-									availableNonces: nonces,
-									reservedNonces: sponsorState.reservedNonces[index],
-									maxNonce: sponsorState.maxNonces[index],
-								})),
-						  }
-						: undefined,
-					error: e,
-				},
-				{ headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST' } }
-			);
-		}
+				nonceManagement: sponsorState
+					? {
+							nextSponsorIndex: sponsorState.nextIndex,
+							sponsors: sponsorState.nonces.map((nonces, index) => ({
+								index,
+								availableNonces: nonces,
+								reservedNonces: sponsorState.reservedNonces[index],
+								maxNonce: sponsorState.maxNonces[index],
+							})),
+					  }
+					: undefined,
+			},
+			{ headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST' } }
+		);
 	},
 };
 
