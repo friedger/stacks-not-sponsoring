@@ -50,8 +50,8 @@ describe('Sponsoring worker - NOT', () => {
 		const response = await sendSendMany(receivers, feesInNot);
 		const result = (await response.json()) as any;
 
-		expect(result).toHaveProperty('error', 'transaction rejected');
-		expect(result).toHaveProperty('reason', 'FeeTooLow');
+		expect(result.error).toHaveProperty('error', 'transaction rejected');
+		expect(result.error).toHaveProperty('reason', 'FeeTooLow');
 	});
 
 	it('responds with sponsored transaction if sponsor is not last', async () => {
@@ -62,9 +62,8 @@ describe('Sponsoring worker - NOT', () => {
 		];
 		const response = await sendSendMany(receivers, feesInNot);
 		const result = (await response.json()) as any;
-		console.log('result respond with sponsored tx if sponsor is not last', result);
-		expect(result).toHaveProperty('error', 'transaction rejected');
-		expect(result).toHaveProperty('reason', 'FeeTooLow');
+		expect(result.error).toHaveProperty('error', 'transaction rejected');
+		expect(result.error).toHaveProperty('reason', 'FeeTooLow');
 	});
 
 	it('responds with error if fees are too low', async () => {
@@ -96,20 +95,15 @@ describe('Sponsoring worker - Status', () => {
 			},
 			method: 'GET',
 		});
-		expect(await response.text()).toMatchInlineSnapshot(
-			`"{"active":true,"sponsor_addresses":["SP1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRCBGD7R"],"fees":{"not":10000,"sponsor":["SP1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRCBGD7R"]}}"`
-		);
+		expect(response.status).toBe(200);
+		const result = await response.json();
+		expect(result.active).toBe(true);
+		expect(result.sponsor_addresses).toContain(NOT_SPONSOR);
+		expect(result.fees).toEqual({ not: MINIMUM_NOT_FEES, sponsor: [NOT_SPONSOR] });
 	});
 });
 
-describe('Sponsoring worker - Integration', () => {
-	it('responds to status endpoint using SELF', async () => {
-		const response = await SELF.fetch('http://localhost/not/v1/info', {
-			method: 'GET',
-		});
-		expect(response.status).toBe(200);
-	});
-
+describe('Sponsoring worker - http errors', () => {
 	it('responds with error for invalid POST to /not', async () => {
 		const response = await SELF.fetch('http://localhost/not/v1/sponsor', {
 			body: JSON.stringify({
@@ -122,7 +116,6 @@ describe('Sponsoring worker - Integration', () => {
 			},
 			method: 'POST',
 		});
-		console.log(await response.text());
 		expect(response.status).toBe(400);
 	});
 
